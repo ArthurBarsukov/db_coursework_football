@@ -28,8 +28,6 @@ class TelemetryRepositoryPort(Protocol):
     def log_query_metrics(self, metrics: SearchQueryDTO) -> None:
         ...
 
-# --- Додаємо нові порти, які вимагають адаптери ---
-
 class CacheStorePort(Protocol):
     def get_cached_dossier(self, player_id: int) -> dict | None:
         ...
