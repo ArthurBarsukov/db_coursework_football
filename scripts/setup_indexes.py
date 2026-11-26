@@ -1,11 +1,15 @@
 from __future__ import annotations
+
 import argparse
+
 from pymongo import ASCENDING, DESCENDING
+
 from command_service.config import (
     create_mongo_client,
     get_critical_collection,
     get_database,
 )
+
 
 def setup_pre_indexes() -> None:
     client = create_mongo_client()
@@ -42,7 +46,7 @@ def setup_post_indexes() -> None:
         players = get_critical_collection(db, "players")
         search_queries = get_critical_collection(db, "search_queries")
 
-        # Складений індекс для параметричної фільтрації
+        # Складений індекс для параметричної фільтрації (правило ESR: position -> sub_position -> market_value_eur)
         players.create_index(
             [
                 ("position", ASCENDING),
@@ -52,19 +56,30 @@ def setup_post_indexes() -> None:
             name="idx_players_pos_subpos_value",
         )
 
-        # Індекс для вибірки складу клубу та підрахунку players_count
+        # Індекс для вибірки складу клубу (категорія 3) та підрахунку players_count
         players.create_index(
             [("current_club_id", ASCENDING)],
             name="idx_players_current_club_id",
         )
 
-        # Складений multikey-індекс для фільтрації вкладеного масиву через $elemMatch
+        # Перебудова складеного multikey-індексу для $elemMatch:
+        # спочатку найвідсівніша рівністна умова (competition_id), далі діапазони (minutes_played, goals)
+        elem_match_index_name = "idx_players_appearances_elem_match"
+        desired_elem_match_keys = [
+            ("appearances.competition_id", ASCENDING),
+            ("appearances.minutes_played", ASCENDING),
+            ("appearances.goals", ASCENDING),
+        ]
+        existing_indexes = players.index_information()
+        if elem_match_index_name in existing_indexes:
+            existing_keys = list(existing_indexes[elem_match_index_name].get("key", []))
+            if existing_keys != desired_elem_match_keys:
+                players.drop_index(elem_match_index_name)
+                print(f"[POST] Видалено застарілий індекс '{elem_match_index_name}': {existing_keys}")
+
         players.create_index(
-            [
-                ("appearances.minutes_played", ASCENDING),
-                ("appearances.goals", ASCENDING),
-            ],
-            name="idx_players_appearances_elem_match",
+            desired_elem_match_keys,
+            name=elem_match_index_name,
         )
 
         # Індекс для сортування телеметрії за часом
