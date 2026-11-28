@@ -1,0 +1,9 @@
+__pycache__/
+.venv/
+*.pyc
+.env
+data/
+*.csv
+.idea/
+scripts/check_*.py
+demo_results*.txt
