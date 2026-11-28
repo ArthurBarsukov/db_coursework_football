@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import math
 import time
 from collections.abc import Sequence
 from dataclasses import asdict, fields, replace
@@ -79,12 +80,14 @@ class PlayerProfileService:
         limit: int = 20,
         *,
         consistent_read: bool = False,
+        offset: int = 0,
     ) -> PlayerWithAppearancesDTO | None:
         return self.repository.get_player_with_appearances(
-            player_id, limit=limit, consistent_read=consistent_read
+            player_id, limit=limit, consistent_read=consistent_read, offset=offset
         )
 
     def filter_players(self, criteria: PlayerFilterCriteria) -> list[PlayerDTO]:
+        self.validate_filter(criteria)
         t0 = time.perf_counter()
         results = self.repository.filter_players(criteria)
         elapsed_ms = round((time.perf_counter() - t0) * 1000.0, 2)
@@ -104,6 +107,38 @@ class PlayerProfileService:
                 ),
             )
         return results
+
+    @staticmethod
+    def validate_filter(criteria: PlayerFilterCriteria) -> None:
+        if not 1 <= criteria.limit <= 200 or not 0 <= criteria.offset <= 100_000:
+            raise ValueError("Некоректні параметри пагінації.")
+        if criteria.sort_by not in {"market_value_eur", "avg_performance_score", "total_goals", "total_matches"}:
+            raise ValueError("Невідоме поле сортування.")
+        if criteria.sort_order not in {-1, 1}:
+            raise ValueError("Напрям сортування має бути -1 або 1.")
+        for key in ("name", "position", "sub_position", "foot", "citizenship", "competition_id"):
+            value = getattr(criteria, key)
+            if value is not None and (not isinstance(value, str) or len(value) > 100):
+                raise ValueError(f"Некоректне поле {key}.")
+        for key in ("min_market_value_eur", "max_market_value_eur", "min_avg_score", "min_match_minutes", "min_match_goals", "min_match_score"):
+            value = getattr(criteria, key)
+            if value is not None and (not math.isfinite(value) or value < 0):
+                raise ValueError(f"Поле {key} має бути невід'ємним скінченним числом.")
+        if criteria.current_club_id is not None and criteria.current_club_id < 1:
+            raise ValueError("ID клубу має бути додатним.")
+        if criteria.min_market_value_eur is not None and criteria.max_market_value_eur is not None and criteria.min_market_value_eur > criteria.max_market_value_eur:
+            raise ValueError("Мінімальна вартість перевищує максимальну.")
+        for key in ("min_avg_score", "min_match_score"):
+            if getattr(criteria, key) is not None and getattr(criteria, key) > 10:
+                raise ValueError("Рейтинг має бути в діапазоні 0–10.")
+
+    def list_players(self, criteria: PlayerFilterCriteria) -> tuple[list[PlayerDTO], bool]:
+        """Read one extra result to detect the next page without a second count query."""
+        self.validate_filter(criteria)
+        if criteria.limit > 100:
+            raise ValueError("На сторінці може бути не більше 100 записів.")
+        players = self.filter_players(replace(criteria, limit=criteria.limit + 1))
+        return players[:criteria.limit], len(players) > criteria.limit
 
 
 class AppearanceService:
@@ -296,6 +331,7 @@ class PlayerFacade:
         appearances_limit: int = 20,
         *,
         consistent_read: bool = False,
+        appearances_offset: int = 0,
     ) -> PlayerDossierDTO | None:
         t0 = time.perf_counter()
 
@@ -303,6 +339,7 @@ class PlayerFacade:
             player_id,
             limit=appearances_limit,
             consistent_read=consistent_read,
+            offset=appearances_offset,
         )
         if player_with_apps is None:
             if self.enable_telemetry:

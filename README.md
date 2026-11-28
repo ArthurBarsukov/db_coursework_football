@@ -315,3 +315,7 @@ score = 5.0 + 1.5·голи + 1.0·асисти + 0.5·(хвилини / 90) −
 | Повнотекстовий пошук і `build_full_scouting_report` | заплановано (Elasticsearch) |
 | Вхідні порти (`ports/input.py`) | заплановано |
 | High-Load генератор, веб-моніторинг | заплановано |
+
+## Stage 12 — Web UI
+
+Player search, filters, dossiers and appearance pagination: see [STAGE12.md](STAGE12.md) for setup, API contracts and validation.

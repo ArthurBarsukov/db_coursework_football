@@ -27,7 +27,7 @@ class PlayerProfileRepositoryPort(Protocol):
         ...
 
     def get_player_with_appearances(
-        self, player_id: int, limit: int = 20, *, consistent_read: bool = False
+        self, player_id: int, limit: int = 20, *, consistent_read: bool = False, offset: int = 0
     ) -> PlayerWithAppearancesDTO | None:
         ...
 

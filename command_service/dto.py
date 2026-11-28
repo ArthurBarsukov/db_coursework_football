@@ -126,6 +126,8 @@ class CompetitionDTO:
 class PlayerFilterCriteria:
     """Критерії багатокритеріальної фільтрації гравців (категорія 2)."""
 
+    name: str | None = None
+    offset: int = 0
     position: str | None = None
     sub_position: str | None = None
     foot: str | None = None

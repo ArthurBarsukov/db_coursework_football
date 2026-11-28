@@ -90,12 +90,14 @@ class PlayerQueryController:
         appearances_limit: int = 20,
         *,
         consistent_read: bool = False,
+        appearances_offset: int = 0,
     ) -> dict[str, Any]:
         try:
             dossier = self.player_facade.get_full_player_dossier(
                 player_id=int(player_id),
                 appearances_limit=appearances_limit,
                 consistent_read=consistent_read,
+                appearances_offset=appearances_offset,
             )
             if dossier is None:
                 return {
@@ -123,6 +125,21 @@ class PlayerQueryController:
             }
         except Exception as exc:
             return {"status": "error", "message": str(exc)}
+
+    def list_players(self, criteria: PlayerFilterCriteria) -> dict[str, Any]:
+        if self.profile_service is None:
+            return {"status": "error", "message": "PlayerProfileService is not configured"}
+        try:
+            players, has_more = self.profile_service.list_players(criteria)
+            return {
+                "status": "success", "data": [asdict(p) for p in players],
+                "count": len(players),
+                "pagination": {"offset": criteria.offset, "limit": criteria.limit, "has_more": has_more},
+            }
+        except ValueError as exc:
+            return {"status": "validation_error", "message": str(exc)}
+        except Exception:
+            return {"status": "error", "message": "Не вдалося отримати дані."}
 
     def get_club_roster(self, club_id: int, limit: int = 50) -> dict[str, Any]:
         if self.reference_service is None:

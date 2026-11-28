@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+
 from collections.abc import Sequence
 from dataclasses import MISSING, asdict, fields
 from datetime import datetime, timedelta, timezone
@@ -142,12 +144,13 @@ class MongoAdapter(
         limit: int = 20,
         *,
         consistent_read: bool = False,
+        offset: int = 0,
     ) -> PlayerWithAppearancesDTO | None:
         safe_limit = min(max(1, int(limit)), 500)
         collection = self._players_critical if consistent_read else self._players_read
         doc = collection.find_one(
             {"player_id": int(player_id)},
-            {"_id": 0, "appearances": {"$slice": safe_limit}},
+            {"_id": 0, "appearances": {"$slice": [max(0, int(offset)), safe_limit]}},
         )
         if doc is None:
             return None
@@ -179,6 +182,9 @@ class MongoAdapter(
 
     def filter_players(self, criteria: PlayerFilterCriteria) -> list[PlayerDTO]:
         query: dict[str, Any] = {}
+
+        if criteria.name:
+            query["name"] = {"$regex": re.escape(criteria.name.strip()), "$options": "i"}
 
         if criteria.position is not None:
             query["position"] = criteria.position
@@ -235,7 +241,8 @@ class MongoAdapter(
 
         cursor = (
             self._players_read.find(query, {"_id": 0, "appearances": 0})
-            .sort([(sort_field, sort_direction)])
+            .sort([(sort_field, sort_direction), ("player_id", 1)])
+            .skip(max(0, int(criteria.offset)))
             .limit(safe_limit)
         )
         return [self._to_player_dto(doc) for doc in cursor]

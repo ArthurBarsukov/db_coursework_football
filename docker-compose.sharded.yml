@@ -1,0 +1,60 @@
+services:
+  cfg-1:
+    image: mongo:7.0
+    container_name: cfg-1
+    command: mongod --configsvr --replSet cfgRS --port 27019 --bind_ip_all --wiredTigerCacheSizeGB 0.5
+    volumes:
+      - cfg1_data:/data/db
+    networks:
+      - mongo-sharded-net
+
+  shard-1:
+    image: mongo:7.0
+    container_name: shard-1
+    command: mongod --shardsvr --replSet shard1RS --port 27018 --bind_ip_all --wiredTigerCacheSizeGB 0.5
+    volumes:
+      - shard1_data:/data/db
+    networks:
+      - mongo-sharded-net
+
+  shard-2:
+    image: mongo:7.0
+    container_name: shard-2
+    command: mongod --shardsvr --replSet shard2RS --port 27018 --bind_ip_all --wiredTigerCacheSizeGB 0.5
+    volumes:
+      - shard2_data:/data/db
+    networks:
+      - mongo-sharded-net
+
+  shard-3:
+    image: mongo:7.0
+    container_name: shard-3
+    command: mongod --shardsvr --replSet shard3RS --port 27018 --bind_ip_all --wiredTigerCacheSizeGB 0.5
+    volumes:
+      - shard3_data:/data/db
+    networks:
+      - mongo-sharded-net
+
+  mongos:
+    image: mongo:7.0
+    container_name: mongos
+    command: mongos --configdb cfgRS/cfg-1:27019 --port 27017 --bind_ip_all
+    ports:
+      - "27017:27017"
+    depends_on:
+      - cfg-1
+      - shard-1
+      - shard-2
+      - shard-3
+    networks:
+      - mongo-sharded-net
+
+volumes:
+  cfg1_data:
+  shard1_data:
+  shard2_data:
+  shard3_data:
+
+networks:
+  mongo-sharded-net:
+    driver: bridge
