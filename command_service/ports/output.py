@@ -106,11 +106,12 @@ class GraphRepositoryPort(Protocol):
 class CacheStorePort(Protocol):
     """Порт кешування скаутських досьє (Redis)."""
 
-    def get_cached_dossier(self, player_id: int) -> dict | None:
+    def get_cached_dossier(self, player_id: int, *, appearances_limit: int = 20, appearances_offset: int = 0) -> dict | None:
         ...
 
     def set_cached_dossier(
-        self, player_id: int, data: dict, ttl_seconds: int = 300
+        self, player_id: int, data: dict, ttl_seconds: int = 300,
+        *, appearances_limit: int = 20, appearances_offset: int = 0
     ) -> None:
         ...
 

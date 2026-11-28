@@ -2,15 +2,19 @@
 from __future__ import annotations
 
 import atexit
+import os
 from dataclasses import replace
 from datetime import date, datetime
 
 from flask import Flask, jsonify, render_template, request
 from flask.json.provider import DefaultJSONProvider
+from redis import Redis
 
 from command_service.adapters.inbound.controllers import PlayerQueryController
 from command_service.adapters.outbound.mongo_adapter import MongoAdapter
 from command_service.adapters.outbound.neo4j_adapter import Neo4jAdapter
+from command_service.adapters.outbound.redis_adapter import RedisAdapter
+from command_service.application.cached_dossiers import CachedDossiers
 from command_service.application.services import (
     AppearanceService, PlayerFacade, PlayerProfileService, ScoutingService,
 )
@@ -36,16 +40,24 @@ def build_controller(repository):
     return PlayerQueryController(facade, profile_service=profiles)
 
 
-def create_app(repository=None):
+def create_app(repository=None, cache=None):
     app = Flask(__name__)
     app.json = ISOJSONProvider(app)
     app.json.ensure_ascii = False
     if repository is None:
+        if os.getenv("REDIS_ENABLED", "1") == "1":
+            redis_client = Redis.from_url(
+                os.getenv("REDIS_URL", "redis://127.0.0.1:6379/0"),
+                socket_connect_timeout=0.3, socket_timeout=0.3, decode_responses=True,
+            )
+            atexit.register(redis_client.close)
+            cache = RedisAdapter(redis_client, os.getenv("REDIS_CACHE_NAMESPACE", "football:dossier:v1"))
         settings = replace(MongoSettings.from_env(), server_selection_timeout_ms=3000)
         client = create_mongo_client(settings)
         atexit.register(client.close)
         repository = MongoAdapter(get_database(client, settings))
     controller = build_controller(repository)
+    dossiers = CachedDossiers(controller, cache, int(os.getenv("CACHE_TTL_SECONDS", "300")))
 
     def respond(result):
         status = result.get("status")
@@ -100,10 +112,7 @@ def create_app(repository=None):
                 raise ValueError("Некоректні параметри досьє.")
             limit = integer("appearances_limit", 20, 1, 100)
             offset = integer("appearances_offset", 0, 0, 100_000)
-            result = controller.get_player(player_id, appearances_limit=limit, appearances_offset=offset)
-            if result.get("status") == "success":
-                total = result["data"]["total_matches"]
-                result["pagination"] = {"offset": offset, "limit": limit, "total": total, "has_more": offset + limit < total}
+            result = dossiers.get(player_id, appearances_limit=limit, appearances_offset=offset)
             return respond(result)
         except ValueError as exc:
             return jsonify(status="validation_error", message=str(exc)), 400

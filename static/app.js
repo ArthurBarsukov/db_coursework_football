@@ -52,10 +52,17 @@ async function openPlayer(id, appearanceOffset=0){
   if(detailAbort)detailAbort.abort();detailAbort=new AbortController();
   document.querySelector('#dossier-title').textContent='Досьє гравця';detail.replaceChildren(node('p','Завантаження досьє…'));if(!dialog.open)dialog.showModal();
   try{
-    const {data:p, pagination}=await request(`/api/players/${id}?appearances_limit=20&appearances_offset=${appearanceOffset}`,detailAbort.signal);
+    const {data:p, pagination, cache}=await request(`/api/players/${id}?appearances_limit=20&appearances_offset=${appearanceOffset}`,detailAbort.signal);
     document.querySelector('#dossier-title').textContent=p.name;
     const parts=[p.citizenship,positions[p.position]||p.position,p.current_club_name,p.date_of_birth?`Дата народження: ${p.date_of_birth.slice(0,10)}`:null,p.foot?`Робоча нога: ${feet[p.foot]||p.foot}`:null,p.height_in_cm?`Зріст: ${p.height_in_cm} см`:null].filter(Boolean);
     detail.replaceChildren(node('p',parts.join(' · '),'detail-sub'));
+    if(cache){
+      const states={hit:'Влучання в кеш',miss:'Промах кешу · дані збережено',unavailable:'Redis недоступний · запит до MongoDB',disabled:'Кеш вимкнено'};
+      const panel=node('div',undefined,'cache-panel');panel.setAttribute('role','status');
+      panel.append(node('strong',`Джерело: ${cache.source}`),node('span',states[cache.status]||cache.status),node('span',`Час запиту на сервері: ${number.format(cache.duration_ms)} мс`));
+      if(cache.ttl_seconds)panel.append(node('small',`Термін зберігання кешу: ${cache.ttl_seconds} с. Дані можуть оновлюватися із затримкою.`));
+      const again=node('button','Повторити запит','secondary');again.addEventListener('click',()=>openPlayer(id,appearanceOffset));panel.append(again);detail.append(panel);
+    }
     const metrics=node('div',undefined,'metrics');
     for(const [label,value] of [['Вартість',p.market_value_eur==null?'—':money.format(p.market_value_eur)],['Голи',number.format(p.total_goals)],['Асисти',number.format(p.total_assists)],['Рейтинг',p.avg_performance_score==null?'—':p.avg_performance_score.toFixed(1)]]){const metric=node('div',undefined,'metric');metric.append(node('strong',value),node('span',label));metrics.append(metric);}detail.append(metrics);
     if((p.warnings||[]).includes('tactical_analogs_unavailable'))detail.append(node('p','Пошук тактичних аналогів наразі недоступний. Основне досьє завантажено.','notice'));
