@@ -1,0 +1,19 @@
+services:
+  spark:
+    build:
+      context: .
+      dockerfile: Dockerfile.spark
+    container_name: spark
+    volumes:
+      - ./spark:/app
+      - spark_ivy:/root/.ivy2      # кеш завантажених jar-ів конектора
+    ports:
+      - "8767:8767"
+    depends_on:
+      - mongos
+    networks:
+      - mongo-sharded-net
+    command: sleep infinity
+
+volumes:
+  spark_ivy:

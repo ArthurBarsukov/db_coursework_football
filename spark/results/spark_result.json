@@ -1,0 +1,168 @@
+{
+  "query": "Агрегати гравців за позиціями",
+  "run_at": "2026-11-28T03:02:25",
+  "duration_sec": 4.13,
+  "shards": [
+    {
+      "name": "shard1RS",
+      "docs": 16800
+    },
+    {
+      "name": "shard2RS",
+      "docs": 16660
+    },
+    {
+      "name": "shard3RS",
+      "docs": 16689
+    }
+  ],
+  "partials": [
+    {
+      "shard": "shard1RS",
+      "position": "Attack",
+      "players": 4593,
+      "goals": 35768,
+      "matches": 183176
+    },
+    {
+      "shard": "shard1RS",
+      "position": "Defender",
+      "players": 5330,
+      "goals": 7954,
+      "matches": 212288
+    },
+    {
+      "shard": "shard1RS",
+      "position": "Goalkeeper",
+      "players": 1988,
+      "goals": 8,
+      "matches": 44457
+    },
+    {
+      "shard": "shard1RS",
+      "position": "Midfield",
+      "players": 4685,
+      "goals": 15803,
+      "matches": 193478
+    },
+    {
+      "shard": "shard1RS",
+      "position": "Missing",
+      "players": 204,
+      "goals": 41,
+      "matches": 580
+    },
+    {
+      "shard": "shard2RS",
+      "position": "Attack",
+      "players": 4458,
+      "goals": 36356,
+      "matches": 178295
+    },
+    {
+      "shard": "shard2RS",
+      "position": "Defender",
+      "players": 5302,
+      "goals": 8277,
+      "matches": 216434
+    },
+    {
+      "shard": "shard2RS",
+      "position": "Goalkeeper",
+      "players": 1934,
+      "goals": 8,
+      "matches": 44865
+    },
+    {
+      "shard": "shard2RS",
+      "position": "Midfield",
+      "players": 4772,
+      "goals": 16987,
+      "matches": 195172
+    },
+    {
+      "shard": "shard2RS",
+      "position": "Missing",
+      "players": 194,
+      "goals": 62,
+      "matches": 420
+    },
+    {
+      "shard": "shard3RS",
+      "position": "Attack",
+      "players": 4451,
+      "goals": 34739,
+      "matches": 173861
+    },
+    {
+      "shard": "shard3RS",
+      "position": "Defender",
+      "players": 5329,
+      "goals": 7999,
+      "matches": 208232
+    },
+    {
+      "shard": "shard3RS",
+      "position": "Goalkeeper",
+      "players": 1906,
+      "goals": 6,
+      "matches": 43481
+    },
+    {
+      "shard": "shard3RS",
+      "position": "Midfield",
+      "players": 4815,
+      "goals": 16281,
+      "matches": 199110
+    },
+    {
+      "shard": "shard3RS",
+      "position": "Missing",
+      "players": 188,
+      "goals": 148,
+      "matches": 499
+    }
+  ],
+  "final": [
+    {
+      "position": "Defender",
+      "players": 15961,
+      "goals": 24230,
+      "matches": 636954,
+      "goals_per_match": 0.03804042364126766,
+      "avg_score": 5.397553516819572
+    },
+    {
+      "position": "Midfield",
+      "players": 14272,
+      "goals": 49071,
+      "matches": 587760,
+      "goals_per_match": 0.08348815843201307,
+      "avg_score": 5.405184213664001
+    },
+    {
+      "position": "Attack",
+      "players": 13502,
+      "goals": 106863,
+      "matches": 535332,
+      "goals_per_match": 0.1996200488668714,
+      "avg_score": 5.515251576067558
+    },
+    {
+      "position": "Goalkeeper",
+      "players": 5828,
+      "goals": 22,
+      "matches": 132803,
+      "goals_per_match": 0.00016565890830779425,
+      "avg_score": 5.449974672857753
+    },
+    {
+      "position": "Missing",
+      "players": 586,
+      "goals": 251,
+      "matches": 1499,
+      "goals_per_match": 0.16744496330887257,
+      "avg_score": 5.331081081081081
+    }
+  ]
+}

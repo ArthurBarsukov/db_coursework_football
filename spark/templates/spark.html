@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Spark map-reduce — агрегати за позиціями</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --surface: #ffffff; --text: #1d2330; --muted: #5d6677;
+    --border: #d9dde5; --accent: #1f6feb; --accent-text: #ffffff;
+    --ok: #1a7f37; --err: #c62828; --bar: #7aa7f5;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12151b; --surface: #1b2029; --text: #e6e9ef; --muted: #98a2b3;
+      --border: #2d3442; --accent: #4c8dff; --accent-text: #0d1117;
+      --ok: #56d364; --err: #ff7b72; --bar: #3b6bc4;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 24px 16px 48px; background: var(--bg); color: var(--text);
+    font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  main { max-width: 980px; margin: 0 auto; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  h2 { font-size: 16px; margin: 0 0 12px; }
+  .sub { color: var(--muted); margin: 0 0 20px; }
+  .card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 16px; margin-bottom: 16px;
+  }
+  .toolbar { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+  button {
+    background: var(--accent); color: var(--accent-text); border: 0; border-radius: 8px;
+    padding: 9px 18px; font: inherit; font-weight: 600; cursor: pointer;
+  }
+  button:disabled { opacity: .55; cursor: not-allowed; }
+  #status { color: var(--muted); }
+  #status.ok { color: var(--ok); }
+  #status.err { color: var(--err); }
+  pre#error {
+    display: none; margin: 12px 0 0; padding: 10px; overflow-x: auto;
+    border: 1px solid var(--err); border-radius: 8px; color: var(--err);
+    font-size: 12px; white-space: pre-wrap;
+  }
+  .metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; }
+  .metric { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; }
+  .metric .label { color: var(--muted); font-size: 12px; }
+  .metric .value { font-size: 20px; font-weight: 650; }
+  .scroll { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { padding: 7px 10px; border-bottom: 1px solid var(--border); text-align: right; white-space: nowrap; }
+  th:first-child, td:first-child { text-align: left; }
+  th { color: var(--muted); font-size: 12px; font-weight: 600; }
+  tfoot td { font-weight: 650; border-bottom: 0; }
+  .share { display: flex; align-items: center; gap: 8px; justify-content: flex-end; }
+  .bar { height: 8px; background: var(--bar); border-radius: 4px; min-width: 2px; }
+  .hint { color: var(--muted); font-size: 13px; margin: 10px 0 0; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Агрегати гравців за позиціями</h1>
+  <p class="sub">Запит збирається зі спільної колекції <code>players</code> на трьох шардах MongoDB через Spark (map-reduce).</p>
+
+  <section class="card">
+    <div class="toolbar">
+      <button id="runBtn" type="button">Запустити запит</button>
+      <span id="status">Завантаження стану…</span>
+    </div>
+    <pre id="error"></pre>
+  </section>
+
+  <div id="result" hidden>
+    <section class="card">
+      <div class="metrics">
+        <div class="metric"><div class="label">Час виконання</div><div class="value" id="mDuration">—</div></div>
+        <div class="metric"><div class="label">Гравців оброблено</div><div class="value" id="mPlayers">—</div></div>
+        <div class="metric"><div class="label">Шардів</div><div class="value" id="mShards">—</div></div>
+        <div class="metric"><div class="label">Останній запуск</div><div class="value" id="mRunAt" style="font-size:15px">—</div></div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Підсумок за позиціями (після reduce по всіх шардах)</h2>
+      <div class="scroll">
+        <table>
+          <thead>
+            <tr><th>Позиція</th><th>Гравців</th><th>Голи</th><th>Матчі</th><th>Голи за матч</th><th>Середня оцінка</th></tr>
+          </thead>
+          <tbody id="finalBody"></tbody>
+          <tfoot id="finalFoot"></tfoot>
+        </table>
+      </div>
+      <p class="hint">Середня оцінка враховує лише гравців, які мають виступи (оцінка не null).</p>
+    </section>
+
+    <section class="card">
+      <h2>Внесок шардів</h2>
+      <div class="scroll">
+        <table>
+          <thead><tr><th>Шард</th><th>Документів</th><th>Частка</th></tr></thead>
+          <tbody id="shardBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Часткові результати: гравців за позиціями на кожному шарді</h2>
+      <div class="scroll">
+        <table>
+          <thead id="pivotHead"></thead>
+          <tbody id="pivotBody"></tbody>
+        </table>
+      </div>
+      <p class="hint">Це результат першого рівня reduce — суми, які кожен шард дає окремо, перед об’єднанням у підсумок.</p>
+    </section>
+  </div>
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  const runBtn = document.getElementById("runBtn");
+  const statusEl = document.getElementById("status");
+  const errorEl = document.getElementById("error");
+  const resultEl = document.getElementById("result");
+  let pollTimer = null;
+
+  const nf = new Intl.NumberFormat("uk-UA");
+  const fmtInt = (v) => nf.format(v);
+  const fmtNum = (v, d) => (v === null || v === undefined ? "—" : v.toFixed(d));
+
+  function setStatus(text, cls) {
+    statusEl.textContent = text;
+    statusEl.className = cls || "";
+  }
+
+  // Допоміжна функція: створює рядок таблиці через textContent (без innerHTML).
+  function row(cells, tag) {
+    const tr = document.createElement("tr");
+    cells.forEach((value) => {
+      const td = document.createElement(tag || "td");
+      td.textContent = value;
+      tr.appendChild(td);
+    });
+    return tr;
+  }
+
+  function renderResult(data) {
+    document.getElementById("mDuration").textContent = data.duration_sec.toFixed(2) + " с";
+    document.getElementById("mShards").textContent = data.shards.length;
+    document.getElementById("mRunAt").textContent = data.run_at.replace("T", " ");
+
+    // Підсумок за позиціями
+    const finalBody = document.getElementById("finalBody");
+    const finalFoot = document.getElementById("finalFoot");
+    finalBody.replaceChildren();
+    finalFoot.replaceChildren();
+    let totalPlayers = 0, totalGoals = 0, totalMatches = 0;
+    data.final.forEach((r) => {
+      totalPlayers += r.players;
+      totalGoals += r.goals;
+      totalMatches += r.matches;
+      finalBody.appendChild(row([
+        r.position, fmtInt(r.players), fmtInt(r.goals), fmtInt(r.matches),
+        fmtNum(r.goals_per_match, 3), fmtNum(r.avg_score, 3),
+      ]));
+    });
+    finalFoot.appendChild(row([
+      "Разом", fmtInt(totalPlayers), fmtInt(totalGoals), fmtInt(totalMatches),
+      totalMatches ? (totalGoals / totalMatches).toFixed(3) : "—", "",
+    ]));
+    document.getElementById("mPlayers").textContent = fmtInt(totalPlayers);
+
+    // Внесок шардів (документи й частка)
+    const shardBody = document.getElementById("shardBody");
+    shardBody.replaceChildren();
+    const totalDocs = data.shards.reduce((s, sh) => s + sh.docs, 0);
+    data.shards.forEach((sh) => {
+      const pct = totalDocs ? (sh.docs / totalDocs) * 100 : 0;
+      const tr = row([sh.name, fmtInt(sh.docs), ""]);
+      const share = document.createElement("div");
+      share.className = "share";
+      const label = document.createElement("span");
+      label.textContent = pct.toFixed(2) + "%";
+      const bar = document.createElement("div");
+      bar.className = "bar";
+      bar.style.width = Math.max(pct * 1.6, 2) + "px";
+      share.append(label, bar);
+      tr.lastChild.appendChild(share);
+      shardBody.appendChild(tr);
+    });
+
+    // Зведена таблиця: позиція × шард (кількість гравців із часткових результатів)
+    const shardNames = data.shards.map((sh) => sh.name);
+    const pivotHead = document.getElementById("pivotHead");
+    const pivotBody = document.getElementById("pivotBody");
+    pivotHead.replaceChildren(row(["Позиція", ...shardNames, "Разом"], "th"));
+    pivotBody.replaceChildren();
+    const grid = {};
+    data.partials.forEach((p) => {
+      grid[p.position] = grid[p.position] || {};
+      grid[p.position][p.shard] = p.players;
+    });
+    data.final.forEach((r) => {
+      const cells = shardNames.map((name) => (grid[r.position] && grid[r.position][name]) || 0);
+      pivotBody.appendChild(row([r.position, ...cells.map(fmtInt), fmtInt(r.players)]));
+    });
+
+    resultEl.hidden = false;
+  }
+
+  async function loadResult() {
+    const resp = await fetch("/api/spark/result");
+    if (!resp.ok) return false;
+    renderResult(await resp.json());
+    return true;
+  }
+
+  function stopPolling() {
+    if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+  }
+
+  async function poll() {
+    let st;
+    try {
+      st = await (await fetch("/api/spark/status")).json();
+    } catch (e) {
+      setStatus("Немає зв’язку із сервером", "err");
+      return;
+    }
+    if (st.status === "running") {
+      const elapsed = Math.max(0, Math.round(st.now - st.started_at));
+      setStatus("Spark виконує запит… " + elapsed + " с (перший запуск може тривати довше)");
+      runBtn.disabled = true;
+      return;
+    }
+    stopPolling();
+    runBtn.disabled = false;
+    if (st.status === "error") {
+      setStatus("Помилка виконання", "err");
+      errorEl.textContent = st.error || "";
+      errorEl.style.display = "block";
+    } else if (st.status === "done") {
+      errorEl.style.display = "none";
+      if (await loadResult()) setStatus("Запит виконано", "ok");
+    } else if (st.has_result) {
+      errorEl.style.display = "none";
+      if (await loadResult()) setStatus("Показано результат останнього запуску");
+    } else {
+      setStatus("Результату ще немає. Натисніть «Запустити запит».");
+    }
+  }
+
+  function startPolling() {
+    stopPolling();
+    poll();
+    pollTimer = setInterval(poll, 1000);
+  }
+
+  runBtn.addEventListener("click", async () => {
+    runBtn.disabled = true;
+    errorEl.style.display = "none";
+    setStatus("Запуск…");
+    try {
+      await fetch("/api/spark/run", { method: "POST" });  // 202 або 409 (вже виконується)
+    } catch (e) {
+      setStatus("Не вдалося запустити завдання", "err");
+      runBtn.disabled = false;
+      return;
+    }
+    startPolling();
+  });
+
+  poll();  // стан при відкритті сторінки
+})();
+</script>
+</body>
+</html>
