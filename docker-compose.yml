@@ -1,0 +1,108 @@
+services:
+  mongo1:
+    image: mongo:7.0
+    container_name: mongo1
+    command:
+      [
+        "mongod",
+        "--replSet", "rs0",
+        "--port", "27017",
+        "--bind_ip_all",
+        "--wiredTigerCacheSizeGB", "0.5"
+      ]
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo1_data:/data/db
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "mongosh", "--port", "27017", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  mongo2:
+    image: mongo:7.0
+    container_name: mongo2
+    command:
+      [
+        "mongod",
+        "--replSet", "rs0",
+        "--port", "27018",
+        "--bind_ip_all",
+        "--wiredTigerCacheSizeGB", "0.5"
+      ]
+    ports:
+      - "27018:27018"
+    volumes:
+      - mongo2_data:/data/db
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "mongosh", "--port", "27018", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  mongo3:
+    image: mongo:7.0
+    container_name: mongo3
+    command:
+      [
+        "mongod",
+        "--replSet", "rs0",
+        "--port", "27019",
+        "--bind_ip_all",
+        "--wiredTigerCacheSizeGB", "0.5"
+      ]
+    ports:
+      - "27019:27019"
+    volumes:
+      - mongo3_data:/data/db
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "mongosh", "--port", "27019", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  mongo-init:
+    image: mongo:7.0
+    container_name: mongo-init
+    depends_on:
+      mongo1:
+        condition: service_healthy
+      mongo2:
+        condition: service_healthy
+      mongo3:
+        condition: service_healthy
+    restart: "no"
+    entrypoint:
+      - bash
+      - -c
+      - |
+        mongosh --host mongo1:27017 --eval '
+        try {
+          const status = rs.status();
+          if (status.ok === 1) {
+            print("Replica set rs0 already initialized.");
+          }
+        } catch (e) {
+          print("Initializing replica set rs0...");
+          rs.initiate({
+            _id: "rs0",
+            members: [
+              { _id: 0, host: "mongo1:27017", priority: 2 },
+              { _id: 1, host: "mongo2:27018", priority: 1 },
+              { _id: 2, host: "mongo3:27019", priority: 1 }
+            ]
+          });
+        }
+        '
+
+volumes:
+  mongo1_data:
+  mongo2_data:
+  mongo3_data:
